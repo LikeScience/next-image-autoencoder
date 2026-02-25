@@ -116,9 +116,42 @@ def print_metrics(config, metrics):
     print ("Cell precision by type:", metrics["cell_prec_by_type"])
 
 
+def metrics_predict_rgb_map(model,config,device,scaling_factor,input_test_processed,target_test,tracked_losses_train, tracked_losses_test,outdir=None,allo_width=None,allo_height=None,ego_len=None):
+    input_test_processed = input_test_processed.to(device)
+    output = model(input_test_processed)  # Model output (logits or probabilities)
+    output = output.cpu() 
+        
+    # Initialize a list to hold the decoded outputs for each observation
+    decoded_outputs = []
+    
+    for i in range(output.size(0)):
+        decoded_map = output[i]
+        resized_decoded_map = decoded_map*scaling_factor
+        rounded_decoded_map = torch.round(resized_decoded_map).long()
+        decoded_outputs.append(rounded_decoded_map)
+
+    # Convert to tensor if needed
+    decoded_outputs = torch.stack(decoded_outputs)
+
+    print ("MSE Loss at the end of all the epochs, test:", tracked_losses_test[-1])
+    
+    results = {"tracked_losses_train": tracked_losses_train,
+               "tracked_losses_test": tracked_losses_test,
+               }
+
+    if outdir == None: 
+        out_dir = f"outputs/exploring_latent_space/model_evaluation/{config['config_name']}.json"
+    else: 
+        out_dir = outdir
+    with open(out_dir, "w") as f:
+        json.dump(results, f, indent=4)
+
+    return decoded_outputs
+
 
 
 def latent_space_PCA(latent_spaces,config,pos_list_train, dir_list_train,img_width,img_height,outdir=None):
+    top_components = []
     for latent_space, label in latent_spaces:
         U, S, V = torch.pca_lowrank(latent_space, q=None, center=True, niter=2)
         mean = latent_space.mean(dim=0)
@@ -214,7 +247,8 @@ def latent_space_PCA(latent_spaces,config,pos_list_train, dir_list_train,img_wid
                 plt.colorbar(scatter, ax=ax, label='Head direction',shrink=0.6, pad=0.1)
                 plt.savefig(f"{OUT_DIR}/{i}/3D_{label}.png")
                 plt.clf()
-                
+        top_components.append(top_3_components)
+    return top_components
 
 def accuracy(a,b):
     if a.ndim == 1:

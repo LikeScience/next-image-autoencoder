@@ -59,7 +59,23 @@ class AutoencoderWithoutRNN(nn.Module):
     def get_latent(self, x):
         encoded  = self.encoder.forward(x)
         return encoded, None
+
+class RNN(nn.Module):
+    def __init__(self, input_size, output_size, hidden_fac, latent_size,device):
+        super().__init__()
+        self.device = device
+        self.rnn = nn.RNN(input_size,output_size,nonlinearity='relu')
+        
+    def forward(self, x):
+        hidden = torch.randn(1,self.latent_size,device = self.device)
+        latent, hidden = self.rnn(encoded, hidden)
+        return hidden
     
+    def get_latent(self, x):
+        encoded  = self.encoder.forward(x)
+        hidden = torch.randn(1,self.latent_size,device = self.device)
+        latent, _ = self.rnn(encoded, hidden)
+        return encoded, latent
 
 class AutoencoderRNNSeparateAction(nn.Module):
     def __init__(self, map_size, action_encoding_size, output_size, hidden_fac, latent_size,device):

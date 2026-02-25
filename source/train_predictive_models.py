@@ -19,7 +19,7 @@ def process_input(input_array, mode,img_width,img_height,scaling_factor=10):
     
         world_map = torch.tensor(input_array[:-1]).float()
         world_map /= scaling_factor #scaling; the inputs go from 0 to 10
-        action_encoding = one_hot_encode(input_array[img_width*img_height], 5)
+        action_encoding = one_hot_encode(input_array[-1], 5)
         
         return torch.cat([world_map, action_encoding], dim=0)
     elif mode == 'out':

@@ -1,0 +1,32 @@
+{
+    "config_name": "egocentric_empty_7x7view_rnn",
+    "start_pos": [1,1],
+
+    "observation_space": "egocentric",
+    "egocentric_view_size": 7,
+    "agent_type": ["random", [0.3333, 0.3333, 0.3334],73],
+    
+    "env_seed": 7342,
+    "number_steps_train": 16000,
+    "number_steps_test": 0,
+    "num_random_position_restarts_train": 100,
+    "num_random_position_restarts_test": 0,
+    
+    "number_epochs": 60,
+    "batch_size": 256,
+    "train": false,
+    "load_trained_model_if_existent": true,
+    "save_trained_model": true,
+    "latent_size": 0,
+    "predictive_model_path": "autoencoder_rnn_latent_50_egocentric",
+    "model_type": "autoencoder_rnn",
+    "model_seed": 42,
+
+    "compute_metrics": true,
+    "range_images_of_predictions_to_save":[100,110],
+    "run_grid_search":false,
+    "grid_search": [],
+    "perform_PCA_latent_space": true,
+    "variables_for_viewing_latent_space_representations": ["x_position","y_position","L2_dist_center", "head_direction"],
+    "variables_for_training_decoder": ["position","L2_dist_center", "head_direction"]
+}

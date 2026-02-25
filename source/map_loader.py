@@ -4,6 +4,7 @@ from minigrid.core.actions import Actions
 from minigrid.core.grid import Grid
 from minigrid.core.world_object import WorldObj
 from minigrid.core.constants import OBJECT_TO_IDX
+import random
 
 
 class Env(MiniGridEnv):
@@ -43,11 +44,6 @@ class Env(MiniGridEnv):
       self.grid = Grid(width, height)
       self.grid.wall_rect(0, 0, width, height)
 
-      if self.agent_start_pos is not None and not self.exploring:
-          self.agent_pos = self.agent_start_pos
-          self.agent_dir = self.agent_start_dir
-      else:
-          self.place_agent()
       self.valid_actions = {Actions.left, Actions.right, Actions.forward}
       if self.colors is not None:
           this_colors = self.colors
@@ -55,11 +51,21 @@ class Env(MiniGridEnv):
           this_colors = [[5 for _ in range(width)] for _ in range(height)]
       for i in range(1,height-1):
           for j in range(1,width-1):
-              if (i,j) != self.agent_start_pos:
-                obj = WorldObj.decode(self.world_map[i][j],this_colors[i][j],1) #Assuming all objects with same color and doors start closed
-                if obj is not None:
-                    self.grid.set(j,i,obj) 
+            #   if (i,j) != self.agent_start_pos:
+            obj = WorldObj.decode(self.world_map[i][j],this_colors[i][j],1) #Assuming all objects with same color and doors start closed
+            if obj is not None:
+                self.grid.set(j,i,obj) 
+      if self.agent_start_pos is not None and not self.exploring:
+          self.agent_pos = self.agent_start_pos
+          self.agent_dir = self.agent_start_dir
+      else:
+          self.place_agent_random_pos()
     
+    def place_agent_random_pos(self):
+        self.agent_pos = [0,0]
+        while(self.grid.get(self.agent_pos[0],self.agent_pos[1]) is not None and self.grid.get(self.agent_pos[0],self.agent_pos[1]).type == 'wall'):
+            self.agent_pos = (random.randint(1,self.width-2),random.randint(1,self.height-2))
+        self.agent_dir = random.randint(0,3)
 
     def get_array_repr(self):
         grid_array = self.unwrapped.grid.encode()[:,:,0]
