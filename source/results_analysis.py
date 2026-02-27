@@ -148,6 +148,87 @@ def metrics_predict_rgb_map(model,config,device,scaling_factor,input_test_proces
 
     return decoded_outputs
 
+RGBtitles = ['Red Channel', 'Green Channel', 'Blue Channel']
+RGBcmaps = ['Reds', 'Greens', 'Blues']
+
+def metrics_predict_rgb_with_decoding(model,config,device,scaling_factor,input_test_processed,target_test,tracked_losses_train, tracked_losses_test,outdir=None,nbins=8,ego_len=None):
+    input_test_processed = input_test_processed.to(device)
+    output = model(input_test_processed)  # Model output (logits or probabilities)
+    output = output.cpu() 
+        
+    decoded_outputs = []
+    
+    corr = torch.zeros((nbins, nbins, 3), dtype=torch.long)
+
+    total_pixels = 3*(ego_len**2)*output.size(0)
+    for i in range(output.size(0)):
+        decoded_map = output[i]
+        resized_decoded_map = decoded_map*scaling_factor
+        rounded_decoded_map = torch.round(resized_decoded_map).long()
+        decoded_outputs.append(rounded_decoded_map)
+
+        pred = rounded_decoded_map.reshape(ego_len, ego_len, 3)
+        target = target_test[i].reshape(ego_len, ego_len,3).int()
+        pred_bins = (pred.float() / 256 * nbins).long().clamp(0, nbins - 1)
+        target_bins = (target.float() / 256 * nbins).long().clamp(0, nbins - 1)
+        for ch in range(3):
+            p_flat = pred_bins[:, :, ch].reshape(-1)
+            t_flat = target_bins[:, :, ch].reshape(-1)
+            
+            combined_indices = t_flat * nbins + p_flat
+            counts = torch.bincount(combined_indices, minlength=nbins**2)
+            corr[:, :, ch] += counts.reshape(nbins, nbins)
+
+    decoded_outputs = torch.stack(decoded_outputs)
+    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+    for ch in range(3):
+        out_path_ch_heatmap = outdir+f"/confusion_heatmap.png"
+        data = corr.numpy()
+        im = axes[ch].imshow(data[:, :, ch], cmap=RGBcmaps[ch], origin='lower')
+        axes[ch].set_title(RGBtitles[ch])
+        axes[ch].set_xlabel('Predicted Bin')
+        axes[ch].set_ylabel('Target Bin')
+        fig.colorbar(im, ax=axes[ch], fraction=0.046, pad=0.04)
+    plt.tight_layout()
+    plt.savefig(out_path_ch_heatmap)
+    plt.show()
+
+    range_img = config["range_images_of_predictions_to_save"]
+    imgt = target_test.reshape(-1,ego_len, ego_len, 3).astype(np.uint8)
+    imgo = decoded_outputs.cpu().numpy().astype(np.uint8).reshape(-1,ego_len, ego_len, 3)
+    for i in range(range_img[0],range_img[1]):
+        fig, ax = plt.subplots(1, 2, figsize=(5, 2))
+        ax[0].imshow(imgt[i], interpolation='nearest')
+        ax[0].set_title("Target")
+        ax[0].axis('off')
+        
+        ax[1].imshow(imgo[i], interpolation='nearest')
+        ax[1].set_title("Output")
+        ax[1].axis('off')
+        plt.savefig(outdir+f"/agent_view_{i}.png")
+        plt.show()
+
+    print ("MSE Loss at the end of all the epochs, test:", tracked_losses_test[-1])
+    corr_to_save = corr.permute(2, 0, 1).tolist()
+    results = {"tracked_losses_train": tracked_losses_train,
+               "tracked_losses_test": tracked_losses_test,
+               "pixel_acc": (corr.diagonal(dim1=0, dim2=1).sum().item() / total_pixels),
+                    "confusion_matrices": {
+                        "red": corr_to_save[0],
+                        "green": corr_to_save[1],
+                        "blue": corr_to_save[2]
+                    }
+               }
+
+    if outdir == None: 
+        out_dir = f"metrics.json"
+    else: 
+        out_dir = outdir+ "/metrics.json"
+    with open(out_dir, "w") as f:
+        json.dump(results, f, indent=4)
+
+    return decoded_outputs
+
 
 
 def latent_space_PCA(latent_spaces,config,pos_list_train, dir_list_train,img_width,img_height,outdir=None):

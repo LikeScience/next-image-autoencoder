@@ -5,8 +5,15 @@ import matplotlib.pyplot as plt
 
 #One-hot encoding of discrete integer variable in range [0, num_classes)
 def one_hot_encode(values, num_classes):
-    one_hot = torch.zeros(num_classes)
-    one_hot[values] = 1
+    v = torch.as_tensor(values, dtype=torch.long)
+    if v.ndim == 0:
+      one_hot = torch.zeros(num_classes)
+      one_hot[values] = 1
+    else: 
+        num_values = v.shape[0]
+        one_hot = torch.zeros(num_values * num_classes)
+        indices = torch.arange(num_values) * num_classes + v
+        one_hot[indices] = 1
     return one_hot
 
 def list_argmax(values):
@@ -14,12 +21,12 @@ def list_argmax(values):
     return values.index(x)
 
 # Function to process the entire array (each input array of shape [length])
-def process_input(input_array, mode,img_width,img_height,scaling_factor=10):
+def process_input(input_array, mode,img_width,img_height,scaling_factor=10,n_classes_action=4,n_actions=1):
     if mode == 'in':
     
-        world_map = torch.tensor(input_array[:-1]).float()
+        world_map = torch.tensor(input_array[:-n_actions]).float()
         world_map /= scaling_factor #scaling; the inputs go from 0 to 10
-        action_encoding = one_hot_encode(input_array[-1], 5)
+        action_encoding = one_hot_encode(input_array[-n_actions:], n_classes_action)
         
         return torch.cat([world_map, action_encoding], dim=0)
     elif mode == 'out':
