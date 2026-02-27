@@ -30,7 +30,7 @@ def process_input(input_array, mode,img_width,img_height,scaling_factor=10,n_cla
         
         return torch.cat([world_map, action_encoding], dim=0)
     elif mode == 'out':
-        return torch.tensor(input_array[:-1])/scaling_factor
+        return torch.tensor(input_array[:-n_actions])/scaling_factor
 
 def runSGD(net, input_train, target_train, input_test, target_test, device, lr=0.001, criterion='mse',
            n_epochs=10, batch_size=32,notrain=False,seed=73,shuffle=False,hide_plot=False):

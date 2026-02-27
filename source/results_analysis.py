@@ -194,7 +194,7 @@ def metrics_predict_rgb_with_decoding(model,config,device,scaling_factor,input_t
     plt.show()
 
     range_img = config["range_images_of_predictions_to_save"]
-    imgt = target_test.reshape(-1,ego_len, ego_len, 3).astype(np.uint8)
+    imgt = target_test.cpu().numpy().reshape(-1, ego_len, ego_len, 3).astype(np.uint8)
     imgo = decoded_outputs.cpu().numpy().astype(np.uint8).reshape(-1,ego_len, ego_len, 3)
     for i in range(range_img[0],range_img[1]):
         fig, ax = plt.subplots(1, 2, figsize=(5, 2))
