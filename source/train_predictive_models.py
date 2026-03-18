@@ -30,41 +30,11 @@ def process_input(input_array, mode,img_width,img_height,scaling_factor=10,n_cla
         
         return torch.cat([world_map, action_encoding], dim=0)
     elif mode == 'out':
-        return torch.tensor(input_array[:-n_actions])/scaling_factor
+        return torch.tensor(input_array[:-1])/scaling_factor
 
 def runSGD(net, input_train, target_train, input_test, target_test, device, lr=0.001, criterion='mse',
            n_epochs=10, batch_size=32,notrain=False,seed=73,shuffle=False,hide_plot=False):
-  """
-  Trains autoencoder network with stochastic gradient descent with Adam
-  optimizer and loss criterion. Train samples are shuffled, and loss is
-  displayed at the end of each opoch for both MSE and BCE. Plots training loss
-  at each minibatch (maximum of 500 randomly selected values).
-
-  Args:
-    net (torch network)
-        ANN object (nn.Module)
-
-    input_train (torch.Tensor)
-        vectorized input images from train set
-
-    input_test (torch.Tensor)
-        vectorized input images from test set
-
-    criterion (string)
-        train loss: 'bce' or 'mse'
-
-    n_epochs (boolean)
-        number of full iterations of training data
-
-    batch_size (integer)
-        number of element in mini-batches
-
-    verbose (boolean)
-        print final loss
-
-  Returns:
-    Nothing.
-  """
+  
   #set seeds
   np.random.seed(seed)
   torch.manual_seed(seed)
@@ -100,7 +70,7 @@ def runSGD(net, input_train, target_train, input_test, target_test, device, lr=0
   loss_fn.to(device)
 
   # Initialize SGD optimizer
-  optimizer = optim.Adam(net.parameters(), lr=lr)
+  optimizer = optim.Adam(net.parameters(), lr=lr,weight_decay=1e-4)
 
   # Placeholder for loss
   track_loss, track_loss_train, track_loss_test = [], [], []
@@ -129,7 +99,7 @@ def runSGD(net, input_train, target_train, input_test, target_test, device, lr=0
       track_loss += [float(loss)]
     loss_epoch = f'{i+1}/{n_epochs}'
     with torch.no_grad():
-      output_train = net(input_train)
+      output_train = torch.cat([net(b) for b in torch.split(input_train, batch_size)], dim=0)
       loss_train = loss_fn(output_train, target_train)
       loss_epoch += f'\t {loss_train:.4f}'
       track_loss_train += [loss_train.item()]
@@ -153,4 +123,118 @@ def runSGD(net, input_train, target_train, input_test, target_test, device, lr=0
     plt.ylim([0, None])
     plt.show()
   net.eval()
+  return track_loss_train, track_loss_test
+
+
+from tqdm import tqdm
+
+def runRMSProp(net, input_train, target_train, input_test, target_test, device, 
+               lambda_g=0.002, lambda_b=0.1, lambda_WD=0.003,
+               criterion='mse', n_epochs=10, batch_size=32, notrain=False, 
+               seed=73, shuffle=False, hide_plot=False):
+  
+  # Set seeds 
+  np.random.seed(seed)
+  torch.manual_seed(seed)
+  torch.use_deterministic_algorithms(True)
+  if torch.cuda.is_available():
+      torch.cuda.manual_seed_all(seed)
+      torch.backends.cudnn.deterministic = True
+      torch.backends.cudnn.benchmark = False
+
+  # 2. Move the network to the device
+  input_train = input_train.to(device)
+  target_train = target_train.to(device)
+  input_test = input_test.to(device)
+  target_test = target_test.to(device)
+  net.to(device)
+  net.train()
+  
+  # 1. Initialize groupings based on your list names
+  group_hid_out = [] # W_rec (hidden), W_out (output)
+  group_inp = []     # W_in, W_act (input)
+  group_bias = []    # b (biases)
+
+  # 2. Define scaling constants using your layer names
+  # .numel() returns the integer size of the bias vector
+  k_h = 1 / net.hidden.bias.numel() 
+  k_in = 1 / net.input.bias.numel()
+
+  # 3. Sort parameters into the lists using your logic
+  for name, param in net.named_parameters():
+      if 'bias' in name:
+          group_bias.append(param)
+      elif 'input.weight' in name:
+          group_inp.append(param)
+      else:
+          #'hidden.weight' and 'output.weight'
+          group_hid_out.append(param)
+
+  # Initialize RMSprop 
+  optimizer = torch.optim.RMSprop([
+      {
+          'params': group_hid_out, 
+          'lr': lambda_g * np.sqrt(k_h), 
+          'weight_decay': lambda_WD * (lambda_g * np.sqrt(k_h))
+      },
+      {
+          'params': group_inp, 
+          'lr': lambda_g * np.sqrt(k_in), 
+          'weight_decay': lambda_WD * (lambda_g * np.sqrt(k_in))
+      },
+      {
+          'params': group_bias, 
+          'lr': lambda_b * lambda_g,
+          'weight_decay': lambda_WD * (lambda_b * lambda_g)
+      }
+  ],alpha=0.95,eps=1e-7)
+  # Initialize loss function
+  if criterion == 'mse':
+    loss_fn = nn.MSELoss()
+  elif criterion == 'bce':
+    loss_fn = nn.BCELoss()
+  elif criterion == 'cel':
+    loss_fn = nn.CrossEntropyLoss() 
+  
+  loss_fn.to(device)
+
+  track_loss, track_loss_train, track_loss_test = [], [], []
+  for i in tqdm(range(n_epochs)):
+    net.train() # Ensure train mode
+
+    # Fold the long 2D sequence into a 3D batch: (Time, Batch, Features)
+    input_train = input_train[:(len(input_train)//batch_size)*batch_size].view(batch_size, -1, input_train.size(-1)).transpose(0, 1)
+    target_train = target_train[:(len(target_train)//batch_size)*batch_size].view(batch_size, -1, target_train.size(-1)).transpose(0, 1)
+
+    output_train = net(input_train)
+    loss = loss_fn(output_train, target_train)
+    
+    optimizer.zero_grad()
+    if not notrain:
+      loss.backward()
+      optimizer.step()
+
+    # Evaluation phase
+    net.eval()
+    loss_epoch = f'{i+1}/{n_epochs}'
+    with torch.no_grad():
+      output_train = torch.cat([net(b) for b in torch.split(input_train, batch_size)], dim=0)
+      loss_train = loss_fn(output_train.to(device), target_train.to(device))
+      loss_test = loss_fn(net(input_test.to(device)), target_test.to(device))
+      track_loss_train.append(loss_train.item())
+      track_loss_test.append(loss_test.item())
+    print(loss_train.item())
+
+  # Plot loss
+  step = int(np.ceil(len(track_loss) / 500))
+  input_range = np.arange(0, len(track_loss), step)
+  if not hide_plot:
+    plt.figure()
+    plt.plot(input_range, track_loss[::step], 'C0')
+    plt.xlabel('Iterations')
+    plt.ylabel('Loss')
+    plt.xlim([0, None])
+    plt.ylim([0, None])
+    plt.show()
+
   return track_loss_train, track_loss_test

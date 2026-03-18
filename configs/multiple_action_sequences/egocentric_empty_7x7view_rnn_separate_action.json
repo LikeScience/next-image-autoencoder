@@ -12,7 +12,7 @@
     "num_random_position_restarts_train": 100,
     "num_random_position_restarts_test": 0,
     
-    "number_epochs": 60,
+    "number_epochs": 100,
     "batch_size": 256,
     "train": true,
     "load_trained_model_if_existent": true,

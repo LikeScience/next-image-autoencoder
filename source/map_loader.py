@@ -3,8 +3,12 @@ from minigrid.core.mission import MissionSpace
 from minigrid.core.actions import Actions
 from minigrid.core.grid import Grid
 from minigrid.core.world_object import WorldObj
+from minigrid.core.world_object import Floor
 from minigrid.core.constants import OBJECT_TO_IDX
 import random
+import numpy as np
+
+# Register name to index and name to RGB simultaneously
 
 
 class Env(MiniGridEnv):
@@ -52,9 +56,12 @@ class Env(MiniGridEnv):
       for i in range(1,height-1):
           for j in range(1,width-1):
             #   if (i,j) != self.agent_start_pos:
-            obj = WorldObj.decode(self.world_map[i][j],this_colors[i][j],1) #Assuming all objects with same color and doors start closed
-            if obj is not None:
-                self.grid.set(j,i,obj) 
+            if self.world_map[i][j] == 3 and this_colors[i][j] > 5:
+                pass
+            else:
+                obj = WorldObj.decode(self.world_map[i][j],this_colors[i][j],1) #Assuming all objects with same color and doors start closed
+                if obj is not None:
+                    self.grid.set(j,i,obj) 
       if self.agent_start_pos is not None and not self.exploring:
           self.agent_pos = self.agent_start_pos
           self.agent_dir = self.agent_start_dir
